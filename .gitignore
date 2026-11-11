@@ -218,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# bambu-ntfy-win: never commit device credentials or runtime state
+/config.json
+/user_wifi.cfg
+/.runtime/
