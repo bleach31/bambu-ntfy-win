@@ -6,7 +6,7 @@ Bambu Lab P1S の**ローカルMQTT**をWindows上のPythonで監視し、印刷
 - 印刷開始、再開、一時停止、完了、失敗を通知
 - P1Sへの接続を自動再試行。定期的に読み取り用 `pushall` を送信
 - 状態をローカルファイルに保存して再起動時の重複通知を抑制
-- Windowsタスクスケジューラでログオン時に常駐
+- WindowsタスクスケジューラでPC起動時に常駐（ログイン不要）
 - **プリンターのMQTT以外への操作（停止・移動・印刷開始など）は実行しません**
 
 ## 構成
@@ -86,19 +86,36 @@ Test-NetConnection 192.168.1.50 -Port 8883
 
 IPは実際の `printer.host` に置換してください。ログは `.runtime\bambu-ntfy.log` に保存されます。終了するにはCtrl+Cを押します。
 
-## 4. Windowsログオン時に自動起動
+## 4. Windows起動時に自動起動（ログイン不要）
 
-手動で一度通信を確認してから実行：
+手動で通信を確認し、手動起動の監視プログラムをCtrl+Cで停止してから、**管理者として起動したPowerShell**でリポジトリのフォルダから実行します。
 
 ```powershell
 .\scripts\register-task.ps1
 Start-ScheduledTask -TaskName BambuP1S-Ntfy
 ```
 
-- タスクは**現在のユーザーのログオン時**に起動。PCが起動していてもユーザー未ログオンなら起動しません。
-- バックグラウンドは `pythonw.exe` を使用しコンソール非表示。動作確認はログを見ること。
-- 二重起動すると通知が重複するため、手動の `start.ps1` 実行を終了してからタスクを起動してください。
-- 削除: `.\scripts\remove-task.ps1`
+以前のログオン時起動を登録済みの場合は、先に `git pull` で更新してから上記を実行してください。同じタスク名で上書きするため、古いタスクを削除する必要はありません。`config.json` と `.runtime` のデータも変更しません。
+
+- タスクは **PC起動時（AtStartup）にSYSTEMアカウント** で実行します。ログオン前、画面ロック中、ログアウト後も監視できます。スリープ・シャットダウン中は監視できません。
+- SYSTEMで動かすため、管理者以外が書き換えられない信頼できるローカルフォルダにリポジトリ・仮想環境・Python本体を置いてください。共有の書き込み可能フォルダは使用しないでください。SYSTEMがPython、設定ファイル、ログディレクトリへアクセスできる必要があります。
+- ユーザーのみに適用されるWi-Fi接続・プロキシ・証明書などは、ログオン前やSYSTEMから利用できない場合があります。PC起動直後からネットワークが使える設定にしてください。MQTT接続は自動再試行します。
+- バックグラウンドは `pythonw.exe` を使用しコンソール非表示。状態確認はログを参照してください。タスクの多重起動は抑止しますが、手動起動との同時実行は避けてください。
+- 設定変更後は管理者PowerShellで `Stop-ScheduledTask -TaskName BambuP1S-Ntfy` と `Start-ScheduledTask -TaskName BambuP1S-Ntfy` を実行すれば反映されます。再登録は不要です。
+- 削除: 管理者PowerShellで `.\scripts\remove-task.ps1`
+
+### 起動状態の確認
+
+```powershell
+$task = Get-ScheduledTask -TaskName BambuP1S-Ntfy
+$task | Select-Object TaskName, State
+$task.Principal | Select-Object UserId, LogonType
+$task.Triggers | Select-Object CimClass
+Get-ScheduledTaskInfo -TaskName BambuP1S-Ntfy
+Get-Content .\.runtime\bambu-ntfy.log -Tail 30
+```
+
+`Running`、実行ユーザー `SYSTEM`（または `S-1-5-18`）、起動トリガー `MSFT_TaskBootTrigger` を確認します。再起動試験では、ログオン前にPCがMQTT接続したかログの時刻を確認してください。PC起動直後のネットワーク接続は自動的に再試行されます。
 
 ## 5. 動作の詳細と制限
 

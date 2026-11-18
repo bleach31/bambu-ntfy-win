@@ -18,3 +18,15 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Syntax check
         run: python -m compileall -q bambu_ntfy.py tests
+      - name: PowerShell syntax check
+        shell: pwsh
+        run: |
+          Get-ChildItem scripts -Filter *.ps1 | ForEach-Object {
+            $tokens = $null
+            $parseErrors = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$parseErrors)
+            if ($parseErrors.Count -gt 0) {
+              $parseErrors | Write-Output
+              throw "PowerShell syntax check failed: $($_.Name)"
+            }
+          }
